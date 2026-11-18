@@ -30,6 +30,7 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
       - name: Save state so the same slots are not sent twice
         run: |
+          [ -f state.json ] || exit 0  # dry run (no TG_TOKEN yet)
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
           git add state.json
