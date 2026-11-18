@@ -93,6 +93,8 @@ def main() -> int:
         if fresh:
             send(f"🔥 New appointments: {name}\n" + "\n".join(fresh[:15])
                  + (f"\n… and {len(fresh) - 15} more" if len(fresh) > 15 else "") + f"\n\nBook: {BOOK_URL}")
+    if not os.getenv("TG_TOKEN"):  # dry run: don't mark slots as sent
+        return 0
     STATE_FILE.write_text(json.dumps(new_state, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     return 0
 
