@@ -64,13 +64,14 @@ def check(section: str, option: str) -> list[str]:
     return parse_dates(r.text)
 
 
-def send(text: str) -> None:
+def send(text: str, silent: bool = False) -> None:
     token, chat = os.getenv("TG_TOKEN"), os.getenv("TG_CHAT_ID")
     if not token:
-        print(f"[dry run] {text}")
+        print(f"[dry run{' silent' if silent else ''}] {text}")
         return
     r = requests.post(f"https://api.telegram.org/bot{token}/sendMessage",
-                      data={"chat_id": chat, "text": text, "disable_web_page_preview": True}, timeout=30)
+                      data={"chat_id": chat, "text": text, "disable_web_page_preview": True,
+                            "disable_notification": silent}, timeout=30)
     r.raise_for_status()
 
 
@@ -90,10 +91,14 @@ def main() -> int:
         print(f"{name}: {len(dates)} slot day(s)")
         new_state[name] = dates
         seen = state.get(name, [])
-        if any(d not in seen for d in dates):
-            lines = "\n".join(("🆕 " if d not in seen else "") + d for d in dates)
-            # Telegram caps messages at 4096 chars
-            send(f"🔥 New appointments: {name}\nAll {len(dates)} available day(s):\n{lines[:3800]}\n\nBook: {BOOK_URL}")
+        has_new = any(d not in seen for d in dates)
+        if not dates:
+            send(f"📭 {name}\nNo free appointments right now.", silent=True)
+            continue
+        lines = "\n".join(("🆕 " if d not in seen else "") + d for d in dates)
+        # sent every check; only messages with new days make a sound. Telegram caps messages at 4096 chars
+        send(f"{'🔥 New appointments' if has_new else '📅 Available'}: {name}\nAll {len(dates)} available day(s):\n"
+             f"{lines[:3800]}\n\nBook: {BOOK_URL}", silent=not has_new)
     if not os.getenv("TG_TOKEN"):  # dry run: don't mark slots as sent
         return 0
     STATE_FILE.write_text(json.dumps(new_state, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
