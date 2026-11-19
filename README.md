@@ -1,6 +1,6 @@
 # Aachen Termin Notifier
 
-Checks the Ausländeramt Aachen booking site every 5 minutes (GitHub Actions) and sends a Telegram message when new appointment days appear for:
+Checks the Ausländeramt Aachen booking site every 5 minutes (one GitHub Actions run loops for ~5.5 h, then starts the next; an hourly schedule restarts it if the chain breaks) and sends a Telegram message when new appointment days appear for:
 
 - HBF / Infostelle – Beratungs- und Antragsservice
 - Abholung Aufenthaltserlaubnis

@@ -1,12 +1,15 @@
 name: Check appointments
 
+# GitHub drops most "*/5" schedule runs, so one run loops every 5 minutes
+# for ~5.5 hours and then starts the next run itself. The schedule is only a backup.
 on:
   schedule:
-    - cron: "*/5 * * * *"  # GitHub may delay scheduled runs by a few minutes
+    - cron: "17 * * * *"
   workflow_dispatch:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: check
@@ -15,7 +18,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -24,14 +27,25 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - run: python test_notify.py
-      - run: python notify.py
+      - name: Check every 5 minutes
         env:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-      - name: Save state so the same slots are not sent twice
         run: |
-          [ -f state.json ] || exit 0  # dry run (no TG_TOKEN yet)
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
-          git add state.json
-          git diff --cached --quiet || (git commit -m "Update slot state" && git push)
+          end=$(( $(date +%s) + 330*60 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            python notify.py || echo "check crashed, retrying next round"
+            # save state so the same slots are not sent twice (no state.json on dry runs)
+            if [ -f state.json ]; then
+              git add state.json
+              git diff --cached --quiet || { git commit -qm "Update slot state" && git pull -q --rebase && git push -q; } || echo "state push failed"
+            fi
+            sleep 300
+          done
+      - name: Start the next run
+        if: success() || failure()  # not on cancel, so cancelling a run stops the chain
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run check.yml --ref main -R "$GITHUB_REPOSITORY"

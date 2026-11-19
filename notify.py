@@ -89,10 +89,11 @@ def main() -> int:
             continue
         print(f"{name}: {len(dates)} slot day(s)")
         new_state[name] = dates
-        fresh = [d for d in dates if d not in state.get(name, [])]
-        if fresh:
-            send(f"🔥 New appointments: {name}\n" + "\n".join(fresh[:15])
-                 + (f"\n… and {len(fresh) - 15} more" if len(fresh) > 15 else "") + f"\n\nBook: {BOOK_URL}")
+        seen = state.get(name, [])
+        if any(d not in seen for d in dates):
+            lines = "\n".join(("🆕 " if d not in seen else "") + d for d in dates)
+            # Telegram caps messages at 4096 chars
+            send(f"🔥 New appointments: {name}\nAll {len(dates)} available day(s):\n{lines[:3800]}\n\nBook: {BOOK_URL}")
     if not os.getenv("TG_TOKEN"):  # dry run: don't mark slots as sent
         return 0
     STATE_FILE.write_text(json.dumps(new_state, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
