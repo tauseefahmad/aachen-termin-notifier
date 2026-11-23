@@ -1,5 +1,6 @@
 {
  "HBF / Infostelle - Beratungs- und Antragsservice": [
+  "Montag, 08.03.2027",
   "Dienstag, 09.03.2027",
   "Mittwoch, 10.03.2027",
   "Donnerstag, 11.03.2027",
@@ -48,11 +49,9 @@
   "Freitag, 14.05.2027",
   "Dienstag, 18.05.2027",
   "Mittwoch, 19.05.2027",
-  "Donnerstag, 20.05.2027",
-  "Freitag, 21.05.2027"
+  "Donnerstag, 20.05.2027"
  ],
  "Abholung Aufenthaltserlaubnis": [
-  "Montag, 23.11.2026",
   "Montag, 07.12.2026",
   "Mittwoch, 09.12.2026",
   "Montag, 21.12.2026",
@@ -101,6 +100,7 @@
   "Mittwoch, 03.03.2027",
   "Donnerstag, 04.03.2027",
   "Freitag, 05.03.2027",
-  "Montag, 08.03.2027"
+  "Montag, 08.03.2027",
+  "Dienstag, 09.03.2027"
  ]
 }
