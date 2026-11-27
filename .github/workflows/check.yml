@@ -36,13 +36,15 @@ jobs:
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
           end=$(( $(date +%s) + 330*60 ))
           while [ "$(date +%s)" -lt "$end" ]; do
+            start=$(date +%s)
             python notify.py || echo "check crashed, retrying next round"
             # save state so the same slots are not sent twice (no state.json on dry runs)
             if [ -f state.json ]; then
               git add state.json
               git diff --cached --quiet || { git commit -qm "Update slot state" && git pull -q --rebase && git push -q; } || echo "state push failed"
             fi
-            sleep 300
+            wait=$(( 300 - ($(date +%s) - start) ))  # a full check takes ~1 min
+            [ "$wait" -gt 0 ] && sleep "$wait"
           done
       - name: Start the next run
         if: success() || failure()  # not on cancel, so cancelling a run stops the chain

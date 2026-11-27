@@ -1,4 +1,4 @@
-from notify import find_cnc_id, parse_dates
+from notify import list_options, parse_dates
 
 PAGE = """
 <h3 id="header_concerns_accordion-1">Infostelle</h3>
@@ -11,10 +11,14 @@ PAGE = """
 <div><ul><li id="li-354">Abholung Aufenthaltserlaubnis</li><li id="li-355">Abholung Reiseausweis</li></ul></div>
 """
 
-assert find_cnc_id(PAGE, "Infostelle", "Beratungs- und Antragsservice") == "341"
-assert find_cnc_id(PAGE, "Abholung", "Abholung Reiseausweis") == "355"
+assert list_options(PAGE) == [
+    ("Infostelle – Beratungs- und Antragsservice", "341"),  # nested <li> without id is skipped
+    ("Infostelle – Abgabe Einbürgerungsantrag", "361"),
+    ("Abholung – Abholung Aufenthaltserlaubnis", "354"),
+    ("Abholung – Abholung Reiseausweis", "355"),
+], list_options(PAGE)
 try:
-    find_cnc_id(PAGE, "Aufenthalt", "Team 1")
+    list_options("<p>new layout</p>")
     raise AssertionError("expected LookupError")
 except LookupError:
     pass

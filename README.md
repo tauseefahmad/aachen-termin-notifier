@@ -1,11 +1,9 @@
 # Aachen Termin Notifier
 
-Checks the Ausländeramt Aachen booking site every 5 minutes (one GitHub Actions run loops for ~5.5 h, then starts the next; an hourly schedule restarts it if the chain breaks) and sends a Telegram message when new appointment days appear for:
+Checks the Ausländeramt Aachen booking site every 5 minutes (one GitHub Actions run loops for ~5.5 h, then starts the next; an hourly schedule restarts it if the chain breaks) for **every appointment category** on the booking page (read from the page, so new categories are picked up automatically). Each check sends:
 
-- HBF / Infostelle – Beratungs- und Antragsservice
-- Abholung Aufenthaltserlaubnis
-
-Each slot day is sent once (`state.json` remembers what was sent). If the site layout changes and a check breaks, you get one ⚠️ message.
+- one silent summary: every category with its number of free days and the earliest one
+- one audible message with the full list for each category that has 🆕 days (`state.json` remembers what was seen) If the site layout changes and a check breaks, you get one ⚠️ message.
 
 ## Setup
 
@@ -16,10 +14,6 @@ Each slot day is sent once (`state.json` remembers what was sent). If the site l
 5. **Actions → Check appointments → Run workflow** to test.
 
 To alert a channel instead, add the bot as a channel admin and use `@channelname` as `TG_CHAT_ID`.
-
-## Change what is checked
-
-Edit `CHECKS` in `notify.py`: each entry is the section heading and option label exactly as shown on <https://termine.staedteregion-aachen.de/auslaenderamt/select2?md=1>.
 
 ## Run locally
 
