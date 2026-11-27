@@ -1,8 +1,8 @@
-"""Check every Ausländeramt Aachen appointment category and push the slots to Telegram.
+"""Check every Ausländeramt Aachen appointment category and post the free days to Telegram.
 
-Each run sends one silent summary of all categories, plus one audible message with the
-full list for each category that has new days. Env: TG_TOKEN, TG_CHAT_ID.
-Without TG_TOKEN it only prints (dry run).
+One message per big category (Infostelle, Abholung, ...), sent to that category's channel
+from channels.json, or to TG_CHAT_ID if it has none. Messages are silent unless new days
+appeared. Env: TG_TOKEN, TG_CHAT_ID. Without TG_TOKEN it only prints (dry run).
 """
 import json
 import os
@@ -14,20 +14,24 @@ import requests
 
 BASE = "https://termine.staedteregion-aachen.de/auslaenderamt"
 BOOK_URL = f"{BASE}/select2?md=1"
-STATE_FILE = Path(__file__).with_name("state.json")
+HERE = Path(__file__).parent
+STATE_FILE = HERE / "state.json"
+CHANNELS_FILE = HERE / "channels.json"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
-TG_LIMIT = 3800  # Telegram caps messages at 4096 chars
+TG_LIMIT = 4000  # Telegram caps messages at 4096 chars
+DAYS = {"Montag": "Mo", "Dienstag": "Di", "Mittwoch": "Mi", "Donnerstag": "Do",
+        "Freitag": "Fr", "Samstag": "Sa", "Sonntag": "So"}
 
 
-def list_options(html: str) -> list[tuple[str, str]]:
-    """Every bookable option on the page as (display name, cnc id)."""
+def list_options(html: str) -> list[tuple[str, str, str]]:
+    """Every bookable option on the page as (category, option label, cnc id)."""
     soup = bs4.BeautifulSoup(html, "html.parser")
     options = []
     for h3 in soup.select('h3[id^="header_concerns_accordion"]'):
         section = h3.get_text(strip=True)
         for li in h3.find_next_sibling().select('li[id^="li-"]'):  # nested document lists have no id
             label = li.get_text(" ", strip=True).split(" Tooltip")[0].strip()
-            options.append((f"{section} – {label}", li["id"].split("-")[-1]))
+            options.append((section, label, li["id"].split("-")[-1]))
     if not options:
         raise LookupError("No appointment categories found - the site layout may have changed")
     return options
@@ -62,19 +66,38 @@ def check(cnc: str) -> list[str]:
     return parse_dates(r.text)
 
 
-def send(text: str, silent: bool = False) -> None:
-    token, chat = os.getenv("TG_TOKEN"), os.getenv("TG_CHAT_ID")
-    if not token:
-        print(f"[dry run{' silent' if silent else ''}] {text}")
-        return
-    r = requests.post(f"https://api.telegram.org/bot{token}/sendMessage",
-                      data={"chat_id": chat, "text": text[:4096], "disable_web_page_preview": True,
-                            "disable_notification": silent}, timeout=30)
-    r.raise_for_status()
+def short_day(d: str) -> str:
+    day, _, rest = d.partition(", ")
+    return f"{DAYS[day]} {rest}" if day in DAYS and rest else d
+
+
+def chunks(text: str, limit: int = TG_LIMIT) -> list[str]:
+    """Split on line breaks into pieces Telegram accepts."""
+    out, cur = [], ""
+    for line in text.split("\n"):
+        if cur and len(cur) + 1 + len(line) > limit:
+            out.append(cur)
+            cur = line[:limit]
+        else:
+            cur = f"{cur}\n{line}" if cur else line[:limit]
+    return out + [cur] if cur else out
+
+
+def send(text: str, chat: str | None = None, silent: bool = False) -> None:
+    token, chat = os.getenv("TG_TOKEN"), chat or os.getenv("TG_CHAT_ID")
+    for part in chunks(text):
+        if not token:
+            print(f"[dry run{' silent' if silent else ''} -> {chat}] {part}")
+            continue
+        r = requests.post(f"https://api.telegram.org/bot{token}/sendMessage",
+                          data={"chat_id": chat, "text": part, "disable_web_page_preview": True,
+                                "disable_notification": silent}, timeout=30)
+        r.raise_for_status()
 
 
 def main() -> int:
     state = json.loads(STATE_FILE.read_text(encoding="utf-8")) if STATE_FILE.exists() else {}
+    channels = json.loads(CHANNELS_FILE.read_text(encoding="utf-8")) if CHANNELS_FILE.exists() else {}
     new_state = {}
     try:
         r = requests.get(BOOK_URL, headers={"User-Agent": UA}, timeout=30)
@@ -88,8 +111,11 @@ def main() -> int:
         new_state = {**state, "error:list": msg}
         options = []
 
-    summary = []
-    for name, cnc in options:
+    blocks: dict[str, list[str]] = {}  # category -> text blocks, in page order
+    has_new: dict[str, bool] = {}
+    for section, label, cnc in options:
+        name = f"{section} – {label}"
+        blocks.setdefault(section, [])
         try:
             dates = check(cnc)
         except Exception as e:  # one broken check must not stop the others
@@ -98,22 +124,20 @@ def main() -> int:
             new_state[f"error:{name}"] = msg
             if state.get(f"error:{name}") != msg:
                 send(f"⚠️ Termin bot check failed\n{msg}")
-            summary.append(f"⚠️ {name}: check failed")
+            blocks[section].append(f"▪️ {label}\n⚠️ check failed")
             continue
         print(f"{name}: {len(dates)} slot day(s)")
         new_state[name] = dates
-        # a category seen for the first time is not "new", so adding categories doesn't ping 20 times
-        seen = state.get(name, dates)
-        fresh = [d for d in dates if d not in seen]
-        summary.append(f"{'🔥' if fresh else '📅' if dates else '📭'} {name}: "
-                       + (f"{len(dates)} day(s), earliest {dates[0]}" if dates else "nothing free"))
-        if fresh:
-            lines = "\n".join(("🆕 " if d not in seen else "") + d for d in dates)
-            send(f"🔥 New appointments: {name}\nAll {len(dates)} available day(s):\n"
-                 f"{lines[:TG_LIMIT]}\n\nBook: {BOOK_URL}")
+        seen = state.get(name, dates)  # first time seen is not "new", so adding options doesn't ping
+        has_new[section] = has_new.get(section, False) or any(d not in seen for d in dates)
+        days = ", ".join(("🆕 " if d not in seen else "") + short_day(d) for d in dates) or "nothing free"
+        blocks[section].append(f"▪️ {label} ({len(dates)})\n{days}")
 
-    if summary:
-        send("📋 All categories\n" + "\n".join(summary)[:TG_LIMIT] + f"\n\nBook: {BOOK_URL}", silent=True)
+    for section, parts in blocks.items():
+        new = has_new.get(section, False)
+        send(f"{'🔥 NEW' if new else '📅'} {section}\n\n" + "\n\n".join(parts) + f"\n\nBook: {BOOK_URL}",
+             chat=channels.get(section), silent=not new)
+
     if not os.getenv("TG_TOKEN"):  # dry run: don't mark slots as sent
         return 0
     STATE_FILE.write_text(json.dumps(new_state, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
