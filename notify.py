@@ -159,7 +159,7 @@ def main() -> int:
         icon = ICONS.get(section, "⬜")
         header = f"{icon} <b>{escape(section.upper())}</b> {icon}" + ("  🔥 NEW DAYS" if new else "")
         send(f"{header}\n━━━━━━━━━━━━━━\n" + "\n\n".join(parts)
-             + f"\n━━━━━━━━━━━━━━\n<a href=\"{BOOK_URL}\">📝 Book now</a>",
+             + f"\n━━━━━━━━━━━━━━\n{BOOK_URL}",
              chat=channels.get(section), silent=not new, html=True)
 
     if not os.getenv("TG_TOKEN"):  # dry run: don't mark slots as sent
