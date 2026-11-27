@@ -7,6 +7,7 @@ appeared. Env: TG_TOKEN, TG_CHAT_ID. Without TG_TOKEN it only prints (dry run).
 import json
 import os
 import sys
+from html import escape
 from pathlib import Path
 
 import bs4
@@ -26,6 +27,8 @@ WANTED = {
                        "Verpflichtungserklärung/ Einladung (Videotermin)"],
     "Abholung": ["Abholung Aufenthaltserlaubnis"],
 }
+# one colour per category so the messages are easy to tell apart
+ICONS = {"Infostelle": "🟦", "Einladung/Visa": "🟩", "Abholung": "🟧"}
 DAYS = {"Montag": "Mo", "Dienstag": "Di", "Mittwoch": "Mi", "Donnerstag": "Do",
         "Freitag": "Fr", "Samstag": "Sa", "Sonntag": "So"}
 
@@ -99,15 +102,16 @@ def chunks(text: str, limit: int = TG_LIMIT) -> list[str]:
     return out + [cur] if cur else out
 
 
-def send(text: str, chat: str | None = None, silent: bool = False) -> None:
+def send(text: str, chat: str | None = None, silent: bool = False, html: bool = False) -> None:
     token, chat = os.getenv("TG_TOKEN"), chat or os.getenv("TG_CHAT_ID")
     for part in chunks(text):
         if not token:
             print(f"[dry run{' silent' if silent else ''} -> {chat}] {part}")
             continue
-        r = requests.post(f"https://api.telegram.org/bot{token}/sendMessage",
-                          data={"chat_id": chat, "text": part, "disable_web_page_preview": True,
-                                "disable_notification": silent}, timeout=30)
+        data = {"chat_id": chat, "text": part, "disable_web_page_preview": True, "disable_notification": silent}
+        if html:
+            data["parse_mode"] = "HTML"
+        r = requests.post(f"https://api.telegram.org/bot{token}/sendMessage", data=data, timeout=30)
         r.raise_for_status()
 
 
@@ -141,19 +145,22 @@ def main() -> int:
             new_state[f"error:{name}"] = msg
             if state.get(f"error:{name}") != msg:
                 send(f"⚠️ Termin bot check failed\n{msg}")
-            blocks[section].append(f"▪️ {label}\n⚠️ check failed")
+            blocks[section].append(f"<b>▪️ {escape(label)}</b>\n⚠️ check failed")
             continue
         print(f"{name}: {len(dates)} slot day(s)")
         new_state[name] = dates
         seen = state.get(name, dates)  # first time seen is not "new", so adding options doesn't ping
         has_new[section] = has_new.get(section, False) or any(d not in seen for d in dates)
-        days = ", ".join(("🆕 " if d not in seen else "") + short_day(d) for d in dates) or "nothing free"
-        blocks[section].append(f"▪️ {label} ({len(dates)})\n{days}")
+        days = ", ".join(("🆕 " if d not in seen else "") + escape(short_day(d)) for d in dates) or "<i>nothing free</i>"
+        blocks[section].append(f"<b>▪️ {escape(label)}</b> ({len(dates)})\n{days}")
 
     for section, parts in blocks.items():
         new = has_new.get(section, False)
-        send(f"{'🔥 NEW' if new else '📅'} {section}\n\n" + "\n\n".join(parts) + f"\n\nBook: {BOOK_URL}",
-             chat=channels.get(section), silent=not new)
+        icon = ICONS.get(section, "⬜")
+        header = f"{icon} <b>{escape(section.upper())}</b> {icon}" + ("  🔥 NEW DAYS" if new else "")
+        send(f"{header}\n━━━━━━━━━━━━━━\n" + "\n\n".join(parts)
+             + f"\n━━━━━━━━━━━━━━\n<a href=\"{BOOK_URL}\">📝 Book now</a>",
+             chat=channels.get(section), silent=not new, html=True)
 
     if not os.getenv("TG_TOKEN"):  # dry run: don't mark slots as sent
         return 0
