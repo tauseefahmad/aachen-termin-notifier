@@ -2,7 +2,7 @@
 
 Checks every appointment category on the Ausländeramt Aachen booking site every 5 minutes (one GitHub Actions run loops for ~5.5 h, then starts the next; an hourly schedule restarts it if the chain breaks). Categories are read from the page, so new ones are picked up automatically.
 
-Each check posts **one message per big category** (Infostelle, Einladung/Visa, Unionsbürger, RWTH Super C, FH Aachen, Abholung) with every free day of each option. Messages are silent; they make a sound only when new days appear (marked 🆕, `state.json` remembers what was seen). If the site layout changes and a check breaks, you get one ⚠️ message in your personal chat.
+Each check posts **one message per category** for the options listed in `WANTED` in `notify.py` (now: Infostelle – Beratungs- und Antragsservice; Einladung/Visa – both Verpflichtungserklärung options; Abholung – Aufenthaltserlaubnis) with every free day of each option. Messages are silent; they make a sound only when new days appear (marked 🆕, `state.json` remembers what was seen). If the site layout changes and a check breaks, you get one ⚠️ message in your personal chat.
 
 ## Setup
 

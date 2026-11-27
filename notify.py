@@ -19,6 +19,13 @@ STATE_FILE = HERE / "state.json"
 CHANNELS_FILE = HERE / "channels.json"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
 TG_LIMIT = 4000  # Telegram caps messages at 4096 chars
+# Only these options are checked: category heading -> option labels (start of the text on the site)
+WANTED = {
+    "Infostelle": ["Beratungs- und Antragsservice"],
+    "Einladung/Visa": ["Verpflichtungserklärung/ Einladung (Antragstellung vor Ort)",
+                       "Verpflichtungserklärung/ Einladung (Videotermin)"],
+    "Abholung": ["Abholung Aufenthaltserlaubnis"],
+}
 DAYS = {"Montag": "Mo", "Dienstag": "Di", "Mittwoch": "Mi", "Donnerstag": "Do",
         "Freitag": "Fr", "Samstag": "Sa", "Sonntag": "So"}
 
@@ -35,6 +42,15 @@ def list_options(html: str) -> list[tuple[str, str, str]]:
     if not options:
         raise LookupError("No appointment categories found - the site layout may have changed")
     return options
+
+
+def pick_wanted(options: list[tuple[str, str, str]]) -> list[tuple[str, str, str]]:
+    picked = [o for o in options if any(o[1].startswith(w) for w in WANTED.get(o[0], []))]
+    missing = [f"{s} – {w}" for s, ws in WANTED.items() for w in ws
+               if not any(o[0] == s and o[1].startswith(w) for o in picked)]
+    if missing:
+        raise LookupError("Not on the site anymore: " + "; ".join(missing))
+    return picked
 
 
 def parse_dates(html: str) -> list[str]:
@@ -103,6 +119,7 @@ def main() -> int:
         r = requests.get(BOOK_URL, headers={"User-Agent": UA}, timeout=30)
         r.raise_for_status()
         options = list_options(r.text)
+        options = pick_wanted(options)
     except Exception as e:
         msg = f"Category list: {e}"
         print(f"ERROR {msg}")
